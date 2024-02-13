@@ -43,6 +43,7 @@ import { denormalizePagePath } from '../../shared/lib/page-path/denormalize-page
 import { trace } from '../../trace'
 import type { VersionInfo } from './parse-version-info'
 import {
+  AssetMapper,
   type ChangeSubscriptions,
   type CurrentIssues,
   formatIssue,
@@ -50,6 +51,7 @@ import {
   handleEntrypoints,
   handlePagesErrorRoute,
   handleRouteType,
+  hasEntrypointForKey,
   msToNs,
   processIssues,
   type ReadyIds,
@@ -164,6 +166,8 @@ export async function createHotReloaderTurbopack(
   let currentEntriesHandling = new Promise(
     (resolve) => (currentEntriesHandlingResolve = resolve)
   )
+
+  const assetMapper = new AssetMapper()
 
   function clearRequireCache(
     key: EntryKey,
@@ -328,6 +332,12 @@ export async function createHotReloaderTurbopack(
   }
 
   async function subscribeToHmrEvents(id: string, client: ws) {
+    const key = getEntryKey('assets', 'client', id)
+    if (!hasEntrypointForKey(currentEntrypoints, key, assetMapper)) {
+      // maybe throw an error / force the client to reload?
+      return
+    }
+
     let mapping = clientToHmrSubscription.get(client)
     if (mapping === undefined) {
       mapping = new Map()
@@ -337,8 +347,6 @@ export async function createHotReloaderTurbopack(
 
     const subscription = project!.hmrEvents(id)
     mapping.set(id, subscription)
-
-    const key = getEntryKey('assets', 'client', id)
 
     // The subscription will always emit once, which is the initial
     // computation. This is not a change, so swallow it.
@@ -385,6 +393,7 @@ export async function createHotReloaderTurbopack(
 
         currentEntrypoints,
 
+        assetMapper,
         changeSubscriptions,
         currentIssues,
         manifestLoader,
@@ -401,6 +410,7 @@ export async function createHotReloaderTurbopack(
           startBuilding,
           subscribeToChanges,
           unsubscribeFromChanges,
+          unsubscribeFromHmrEvents,
         },
       })
 
